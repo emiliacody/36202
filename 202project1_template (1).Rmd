@@ -1,0 +1,309 @@
+---
+title: "NYC Housing: Predicting Total Household Income"
+author:
+- Mia Cody
+- ecody
+date: "Due Wed, March 13, at 11:59PM"
+output:
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+  html_document:
+    code_folding: show
+    theme: cosmo
+    toc: yes
+    toc_float: yes
+optin: TRUE
+---
+
+```{r, include=FALSE}
+###########################
+# STYLE EDITS: IGNORE THIS
+###########################
+knitr::opts_chunk$set(message = FALSE) # include this if you don't want markdown to knit messages
+knitr::opts_chunk$set(warning = FALSE) # include this if you don't want markdown to knit warnings
+knitr::opts_chunk$set(echo = FALSE) # set echo=FALSE to hide code from html output
+```
+
+
+```{r}
+
+library("knitr")
+library("kableExtra")
+library("pander")
+library("readr")
+library("magrittr")
+library("car")
+library("interactions")
+library("leaps")
+
+```
+
+```{r, echo=FALSE}
+
+# TO BEGIN:
+# 
+# 1) Read the "project1-instructions" on 
+#    Canvas->Files->project-materials->project1-materials:
+# https://canvas.cmu.edu/files/10888850/download?download_frd=1
+# 
+# 2) Load the packages by running the previous chunk.
+#
+# 3) To load the possible datasets, run the following:
+
+bikes <- readr::read_csv("bikes.csv")
+court <- readr::read_csv("court.csv")
+nyc <- readr::read_csv("nyc.csv")
+social <- readr::read_csv("social.csv")
+
+# 4) Read the corresponding data descriptions
+#    in the "data-story-prompts" folder on: 
+#    Canvas->files->project-materials->project1-materials:
+# https://canvas.cmu.edu/courses/38816/files/folder/project-materials/project1-materials/data-story-prompts
+
+
+```
+
+# Introduction
+New York City is known as a hub of culture and finance, famous for its high cost of living, with rents for small apartments reaching extreme highs. To better understand the city's housing situation, the New York City Housing and Vacancy Survey is conducted every three years. This survey, known for its thorough approach and high response rate, aims to bring awareness to the living conditions of New York's residents.
+In this project, we explore a dataset from the survey that includes information on a selection of New York City households. The data covers various aspects such as total household income, the age of the respondent, the number of maintenance issues reported in their residence between 2002 and 2005, and the year the respondent moved to New York City. Our main goal is to create a linear regression model that can help us understand and predict household income based on these variables.
+Additionally, our client is interested in a specific scenario: predicting the income of a household that has reported three maintenance deficiencies, with the respondent being 53 years old and having moved to New York City in 1987. This particular request adds a practical dimension to our analysis, allowing us to apply our findings to real-world situations and provide insights that could benefit households similar to the one described.
+
+# Exploratory Data Analysis
+
+Data -
+
+In our study of New York City housing, we examine a randomly selected sample of 299 households, focusing on four key variables. Our primary interest lies in understanding income levels, which we aim to correlate with three other factors: the age of the respondent, the number of maintenance deficiencies in their residence, and the year they relocated to New York City. Here's an overview of the variables we're analyzing:
+
+Income: total household income (in $) [the response variable]
+Age: respondent’s age (in years)
+Maintenance Deficiencies: number of maintenance deficiencies of the residence, between 2002 and 2005
+NYC Move: the year the respondent moved to New York City
+
+We begin with univariate data exploration, and observe the first few lines of our data:
+```{r}
+head(nyc)
+```
+
+
+
+# Univariate Exploration
+
+Starting our examination, we first look into each variable on its own. For the continuous variables, we employ histograms to investigate their distributions, as all explanatory variables are quantitative:
+
+
+```{r}
+hist(nyc$Income,
+     main = "Household income",
+     xlab = "Dollars")
+
+hist(nyc$Age,
+     main = "Respondent Age",
+     xlab = "Years")
+
+hist(nyc$MaintenanceDef,
+     main = "Maintenance Deficiencies (2002-2005)",
+     xlab = "Deficiencies")
+
+hist(nyc$NYCMove,
+     main = "Year the Respondent moved to NYC",
+     xlab = "Year")
+
+```
+
+Here are the univariate numerical summaries:
+
+```{r}
+summary(nyc$Income)
+summary(nyc$Age)
+summary(nyc$MaintenanceDef)
+summary(nyc$NYCMove)
+
+```
+
+
+Upon reviewing the graphs and summary statistics for our variables, we observe the following: The income distribution appears mostly unimodal with a slight lean towards the right, having a median of 39,000 and an average of 42,266. The age distribution presents as nearly unimodal with the average and median both hovering around 50, indicating a fairly symmetric distribution. Maintenance deficiencies show a unimodal distribution but with a pronounced lean towards lower numbers. The average household reports about 2 maintenance issues, with the maximum recorded at 8. As for when respondents moved to NYC, the data suggests a distribution that leans towards recent years, possibly showing a unimodal or bimodal pattern, and is right-skewed. The average move-in year is 1983, with a median of 1985.
+
+# Bivariate Exploration
+
+Having analyzed the individual variable distributions within this dataset, we can now visually illustrate the relationships between each predictor and the response variable, Income, as follows:
+
+```{r}
+plot(Income ~ Age,
+data = nyc,
+     main = "Income by Respondent Age",
+     xlab = "Age",
+     ylab = "Income")
+
+plot(Income ~ MaintenanceDef,
+data = nyc,
+     main = "Income by Maintenance Deficiencies",
+     xlab = "Deficiencies",
+     ylab = "Income")
+
+plot(Income ~ NYCMove,
+data = nyc,
+     main = "Income by year moved to NYC",
+     xlab = "Year",
+     ylab = "Income")
+```
+
+Through analysis of our graphs, we find that there seem to be no strong linear relationships between the predictors and income. This is something we will proceed with caution as we move forward in our model.
+
+
+# Modeling
+
+Following our examination and visualization of the relationships between our variables, we proceed to develop a linear regression model aimed at forecasting total household income. Initially, we assess the histogram of our response variable, which appears to lack symmetry, suggesting the potential need for a transformation. At this juncture, we opt to maintain the response variable in its original state, with the intention of revisiting the idea of transformation during the model diagnostics stage.
+Our exploratory data analysis on a bivariate level revealed that the relationship between all variables and total household income is relatively weak. Consequently, we approach the inclusion of all variables in our model with caution, prioritizing the investigation of multicollinearity as our next step. The presence of multicollinearity can often be signaled by notably strong correlations among pairs of explanatory variables, warranting a closer look through a pairs plot. Subsequently, we will scrutinize our variables, considering their p-values, to determine their suitability for inclusion in our model.
+
+
+```{r}
+pairs(nyc)
+```
+It seems that there's no evident strong linear relationship among the explanatory variables, alleviating concerns about multicollinearity. Nevertheless, to ensure the robustness of our model, we'll proceed to evaluate the variation inflation factors (VIF) for each variable within a comprehensive multilinear regression framework that aims to predict Income using all three predictors:
+
+```{r}
+inc.mod <- lm(Income ~  Age + MaintenanceDef + NYCMove, 
+              data = nyc)
+
+summary(inc.mod)
+```
+
+
+```{r}
+car::vif(inc.mod)
+```
+
+Here, we confirm that we are not concerned about multicollinearity as none of the VIF values are over 2.5.
+
+
+
+```{r}
+plot(inc.mod,
+     which = 1)
+```
+
+
+
+
+```{r}
+plot(inc.mod,
+     which=2)
+```
+
+The Q-Q plot reveals slight deviations at the extremes, along with a few outliers at both the upper and lower ends. While these deviations and outliers are noticeable, they don't appear drastic enough to fundamentally challenge the assumption of normality, given that the majority of points align closely with the expected line on the Q-Q plot. Despite this, we remain cautious about including every variable in our model and are similarly tentative regarding the necessity of transforming variables. Additionally, the residual plot follows the linear assumptions as the line remains at zero, with points about equally above and below.
+
+```{r}
+summary(inc.mod)
+```
+In this analysis, MaintenanceDef emerges as the sole significant explanatory variable, being the only one to fall below our chosen alpha threshold. Given this, we could consider applying transformations to the variables that did not achieve significance. So, we propose experimenting with a log transformation of income to see if this adjustment yields a more effective linear relationship between log(income) and our explanatory variables.
+
+
+```{r}
+nyc$log.age <- log(nyc$Age)
+nyc$log.NYCMove <- log(nyc$NYCMove)
+nyc$log.income <- log(nyc$Income)
+
+plot(log.income~Age,
+     data = nyc,
+        main = "Log Income vs. Age",
+        xlab = "age in years",
+        ylab = "log income")
+
+plot(log.income~NYCMove,
+     data = nyc,
+        main = "Log Income vs. Year Moved",
+        xlab = "Year",
+        ylab = "log income")
+```
+Upon applying logarithmic transformations and examining the results, we find that these adjustments do not substantially enhance the linearity of the relationships. Consequently, we will move forward to analyzing the summary of our model.
+
+```{r}
+log.mod <- lm(log.income ~  Age + MaintenanceDef + NYCMove, 
+              data = nyc)
+
+summary(log.mod)
+```
+Here, we see the summary again shows that Age and NYCMove have insignificant p-values, so now we will try a linear transformation on the variables themselves.
+
+```{r}
+log.modTwo <- lm(log.income ~  log.age + MaintenanceDef + log.NYCMove, 
+              data = nyc)
+
+summary(log.modTwo)
+```
+Again, we see the explanatory variables, Age and NYCMove are not significant, when transformed. So, we will now try to create our model by keeping Income as is and transforming only the not significant explanatory variables.
+
+```{r}
+log.modThree <- lm(Income ~  log.age + MaintenanceDef + log.NYCMove, 
+              data = nyc)
+
+summary(log.modThree)
+```
+
+We have exhausted the different possibilities of linear transformation, and know that the explanatory variables Age and NYCMove do not have strong relationships with Income nor are significant. Therefore, we disregard these variables and keep MaintenanceDef. With this in mind, our final regression analysis summary from fitting our final chosen
+model is as shown:
+
+```{r}
+income_mod <- lm(log.income~ MaintenanceDef,
+                 data=nyc)
+summary(income_mod)
+
+
+```
+Now, along with its respective residual plot and normal Q-Q plots:
+
+
+```{r}
+plot(income_mod,
+     which = 1)
+plot(income_mod,
+     which=2)
+```
+Our normal Q-Q plot shows a bit less deviation from the line than previously shown, with some slight taperings off at the ends. Our residual plot shows a bit less of a promising linear assumption in the first half, but follows with points equally above and below the zero line. We might be a bit hesitant about this but we consider other factors such as p-values, R-squared values, etc when finalizing our model.
+
+
+
+Overall, this model offers a viable approach for predicting income, as it demonstrates a modestly linear relationship between income and our quantitative predictors, satisfying the linearity requirement for multiple linear regression. This assertion is supported by our exploratory data analysis (EDA). Compared to alternative models, including those involving logarithmic transformations, this model yields the highest R-squared value. It benefits from a simpler structure, which is particularly advantageous given the sample's limited size. Since only MaintenanceDef proved to be statistically significant at or beyond the 10% level, we find it reasonable to exclude Age and NYCMove as predictors.
+The model's significance is affirmed by a regression F-test p-value of 2.545e-05, with MaintenanceDef emerging as a significant factor, underscored by a p-value of 2.55e-05. The decision to transform the response variable, income, was validated as it enhanced the R-squared value to 0.05805 and yielded a more significant p-value for the regression F-test compared to the model without transformation.
+
+Given that this linear regression model includes only one explanatory variable, concerns about multicollinearity are nonexistent. The coefficient signs align with findings from our EDA and simple regressions, contributing to a model that optimizes the balance between R-squared value, residual diagnostics, and simplicity. The association between the number of maintenance deficiencies and lower income levels is robust, underpinning our confidence in the model's predictive validity.
+
+# Prediction
+
+We have a model that somewhat satisfies all assumptions; so, we are predicting the income of a household that has reported three maintenance deficiencies, with the respondent being 53 years old and having moved to New York City in 1987.
+The predicted income is computed as shown below:
+
+```{r}
+10.65927- (0.10860*3)
+```
+However, this is in terms of our logarithmic transformation, so we can compute our prediction to be:
+
+```{r}
+exp(10.65927) -0.10860*3
+```
+
+And, here is the mean income from our dataset, as stated previously, as well as the standard deviation:
+
+```{r}
+mean(nyc$Income)
+sd(nyc$Income)
+```
+
+
+The predicted household income of a household with three maintenance deficiencies, with the respondent being 53 years old and having moved to New York City in 1987 is 42585.21 dollars. This value is considered a relatively average level of household income, as it is significantly less than one standard deviation above the mean of 42265.9.
+
+# Discussion
+
+Through our analysis, we have learned that total household income is related to the number of maintenance deficiencies a residence had between 2002 and 2005. Since there seemed to be no relationship between Age and Income nor NYCMove and Income, along with insignificant p-values, we will disregard these variables for the sake of our our model.
+
+We encountered issues, such as:
+
+Weak linear relationships through our bivariate exploration; we decided to stay hesitant about these variables and include them in our model until we were able to confirm the need to disregard them from our model.
+
+Slight skews in our normal Q-Q plot; though these skews on both the upper and lower ends were not extreme, they called for hesitation on our proceeding of our model.
+
+P-values that were not significant even at the 10% significance level; for the variables Age and NYCMove, we encountered p-values of less than 0.05 and 0.10, through every linear transformation that we created, So, we were able to disregard these explanatory variables and keep MaintenanceDef.
+
+Our preliminary analysis, specifically the bivariate exploration between Income and MaintenanceDef, raises points that warrant deeper investigation. This suggests the potential necessity for a more thorough examination of these variables and their relationship. Furthermore, our dataset may not encompass all relevant variables, and there are constraints that could restrict the efficacy of our modeling efforts. For example, the scope of the MaintenanceDef variable is confined to documenting the count of maintenance issues within residences from 2002 to 2005—a period that not only represents a limited timeframe but is also somewhat dated. Such observations underscore the complexity and challenges inherent in analyzing housing conditions in NYC. Nevertheless, studies like ours play a crucial role in enhancing our comprehension of the housing landscape in New York City, pointing to the continuous need for updated and comprehensive data for more accurate modeling and understanding.
